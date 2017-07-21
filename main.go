@@ -85,6 +85,7 @@ func (b *BigVector) ProcessFile(name string) {
 		rnd := rand.New(rand.NewSource(int64(h)))
 		for i := range vector {
 			// https://en.wikipedia.org/wiki/Random_projection#More_computationally_efficient_random_projections
+			// make below distribution function of vector element index
 			switch rnd.Intn(6) {
 			case 0:
 				transform[i] = 1
