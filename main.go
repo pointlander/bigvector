@@ -19,7 +19,9 @@ import (
 const (
 	dataLocation = "data/"
 	vectorSize   = 1024
+	bufferSize   = 17
 	queryBook    = "pg1661.txt"
+	queryWord    = "sun"
 )
 
 var authors = map[string]string{
@@ -48,16 +50,32 @@ var authors = map[string]string{
 	"data/2097.txt":    "Arthur Conan Doyle",
 }
 
+type Buffer struct {
+	Buffer []string
+	Index  int
+}
+
+func NewBuffer() *Buffer {
+	return &Buffer{
+		Buffer: make([]string, bufferSize),
+	}
+}
+
+func (b *Buffer) Push(a string) {
+	b.Buffer[b.Index] = a
+	b.Index = (b.Index + 1) % bufferSize
+}
+
 type BigVector struct {
 	Vector []int64
-	Size   int
+	Words  map[string][]int64
 	Name   string
 }
 
 func NewBigVector(size int) *BigVector {
 	return &BigVector{
 		Vector: make([]int64, size),
-		Size:   size,
+		Words:  make(map[string][]int64),
 	}
 }
 
@@ -74,14 +92,15 @@ func (b *BigVector) ProcessFile(name string) {
 	}
 	defer file.Close()
 
-	vector, cache, reader, word, last := b.Vector, make(map[uint64][]int8), bufio.NewReader(file), "", ""
+	vector, cache, reader, word, buffer, size :=
+		b.Vector, make(map[uint64][]int8), bufio.NewReader(file), "", NewBuffer(), len(b.Vector)
 	lookup := func(a string) []int8 {
 		h := hash(a)
 		transform, found := cache[h]
 		if found {
 			return transform
 		}
-		transform = make([]int8, len(vector))
+		transform = make([]int8, size)
 		rnd := rand.New(rand.NewSource(int64(h)))
 		for i := range vector {
 			// https://en.wikipedia.org/wiki/Random_projection#More_computationally_efficient_random_projections
@@ -104,11 +123,44 @@ func (b *BigVector) ProcessFile(name string) {
 		if unicode.IsLetter(r) || r == '\'' {
 			word += string(unicode.ToLower(r))
 		} else if word != "" {
-			transform := lookup(last + word)
+			transform := lookup(buffer.Buffer[(buffer.Index+bufferSize-1)%bufferSize] + word)
 			for i, t := range transform {
 				vector[i] += int64(t)
 			}
-			last, word = word, ""
+
+			center := buffer.Buffer[(buffer.Index+bufferSize/2)%bufferSize]
+			wordVector := b.Words[center]
+			if wordVector == nil {
+				wordVector = make([]int64, size)
+				b.Words[center] = wordVector
+			}
+
+			/*for i := 1; i < bufferSize; i++ {
+				current := buffer.Buffer[(buffer.Index+i)%bufferSize]
+				if current == center {
+					continue
+				}
+				transform := lookup(current)
+				for i, t := range transform {
+					wordVector[i] += int64(t)
+				}
+			}*/
+
+			last := buffer.Buffer[buffer.Index]
+			for i := 1; i < bufferSize; i++ {
+				current := buffer.Buffer[(buffer.Index+i)%bufferSize]
+				if current == center {
+					continue
+				}
+				transform := lookup(last + current)
+				for i, t := range transform {
+					wordVector[i] += int64(t)
+				}
+				last = current
+			}
+
+			buffer.Push(word)
+			word = ""
 		}
 	}
 	b.Name = name
@@ -121,9 +173,13 @@ func (b *BigVector) Distance(a *BigVector) float64 {
 			d += diff * diff
 		}
 	  return float64(d)*/
+	return Similarity(a.Vector, b.Vector)
+}
+
+func Similarity(a, b []int64) float64 {
 	dot, aa, bb := 0.0, 0.0, 0.0
-	for i, j := range b.Vector {
-		x, y := float64(a.Vector[i]), float64(j)
+	for i, j := range b {
+		x, y := float64(a[i]), float64(j)
 		dot += x * y
 		aa += x * x
 		bb += y * y
@@ -165,6 +221,7 @@ func main() {
 	wait.Add(len(files))
 	process := func(name string, vector *BigVector) {
 		vector.ProcessFile(name)
+		fmt.Println(name)
 		wait.Done()
 	}
 	var query *BigVector
@@ -174,10 +231,23 @@ func main() {
 		if file.Name() == queryBook {
 			query = vectors[i]
 		}
-		//fmt.Println(fileName)
 		go process(fileName, vectors[i])
 	}
 	wait.Wait()
+
+	words := make(map[string][]int64)
+	for i := range vectors {
+		for word, vector := range vectors[i].Words {
+			wordVector := words[word]
+			if wordVector == nil {
+				wordVector = make([]int64, vectorSize)
+				words[word] = wordVector
+			}
+			for j, element := range vector {
+				wordVector[j] += element
+			}
+		}
+	}
 
 	fmt.Println("\nresults:")
 	distances := make(Distances, len(files))
@@ -188,5 +258,29 @@ func main() {
 	sort.Sort(distances)
 	for d := range distances {
 		fmt.Printf("%v, %v\n", authors[distances[d].Name], distances[d].Name)
+	}
+
+	best := [20]struct {
+		best float64
+		word string
+	}{}
+	insert := func(b float64, l string) {
+		c := 0
+		for c < len(best) && b < best[c].best {
+			c++
+		}
+		for c < len(best) {
+			b, best[c].best, l, best[c].word = best[c].best, b, best[c].word, l
+			c++
+		}
+	}
+
+	queryVector := words[queryWord]
+	for word, vector := range words {
+		insert(Similarity(queryVector, vector), word)
+	}
+	fmt.Printf("\nword match:\n")
+	for b := range best {
+		fmt.Println(best[b].word)
 	}
 }
