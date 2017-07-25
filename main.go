@@ -51,8 +51,8 @@ var authors = map[string]string{
 }
 
 type Buffer struct {
-	Buffer []string
-	Index  int
+	Buffer          []string
+	Index, Previous int
 }
 
 func NewBuffer() *Buffer {
@@ -63,7 +63,15 @@ func NewBuffer() *Buffer {
 
 func (b *Buffer) Push(a string) {
 	b.Buffer[b.Index] = a
-	b.Index = (b.Index + 1) % bufferSize
+	b.Index, b.Previous = (b.Index+1)%bufferSize, b.Index
+}
+
+func (b *Buffer) Lookup(index int) string {
+	return b.Buffer[(b.Index+index)%bufferSize]
+}
+
+func (b *Buffer) GetPrevious() string {
+	return b.Buffer[b.Previous]
 }
 
 type BigVector struct {
@@ -123,20 +131,20 @@ func (b *BigVector) ProcessFile(name string) {
 		if unicode.IsLetter(r) || r == '\'' {
 			word += string(unicode.ToLower(r))
 		} else if word != "" {
-			transform := lookup(buffer.Buffer[(buffer.Index+bufferSize-1)%bufferSize] + word)
+			transform := lookup(buffer.GetPrevious() + word)
 			for i, t := range transform {
 				vector[i] += int64(t)
 			}
 
-			center := buffer.Buffer[(buffer.Index+bufferSize/2)%bufferSize]
+			center := buffer.Lookup(bufferSize / 2)
 			wordVector := b.Words[center]
 			if wordVector == nil {
 				wordVector = make([]int64, size)
 				b.Words[center] = wordVector
 			}
 
-			/*for i := 1; i < bufferSize; i++ {
-				current := buffer.Buffer[(buffer.Index+i)%bufferSize]
+			/*for i := 0; i < bufferSize; i++ {
+				current := buffer.Lookup(i)
 				if current == center {
 					continue
 				}
@@ -146,9 +154,9 @@ func (b *BigVector) ProcessFile(name string) {
 				}
 			}*/
 
-			last := buffer.Buffer[buffer.Index]
+			last := buffer.Lookup(0)
 			for i := 1; i < bufferSize; i++ {
-				current := buffer.Buffer[(buffer.Index+i)%bufferSize]
+				current := buffer.Lookup(i)
 				if current == center {
 					continue
 				}
@@ -177,14 +185,14 @@ func (b *BigVector) Distance(a *BigVector) float64 {
 }
 
 func Similarity(a, b []int64) float64 {
-	dot, aa, bb := 0.0, 0.0, 0.0
+	dot, xx, yy := 0.0, 0.0, 0.0
 	for i, j := range b {
 		x, y := float64(a[i]), float64(j)
 		dot += x * y
-		aa += x * x
-		bb += y * y
+		xx += x * x
+		yy += y * y
 	}
-	return dot / math.Sqrt(aa*bb)
+	return dot / math.Sqrt(xx*yy)
 }
 
 type Distance struct {
@@ -249,7 +257,7 @@ func main() {
 		}
 	}
 
-	fmt.Println("\nresults:")
+	fmt.Println("\ndocument match:")
 	distances := make(Distances, len(files))
 	for i := range distances {
 		distances[i].D = query.Distance(vectors[i])
