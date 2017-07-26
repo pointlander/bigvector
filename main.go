@@ -50,36 +50,50 @@ var authors = map[string]string{
 	"data/2097.txt":    "Arthur Conan Doyle",
 }
 
-type Buffer struct {
+// CircularBuffer is a circular buffer of size bufferSize
+type CircularBuffer struct {
 	Buffer          []string
 	Index, Previous int
 }
 
-func NewBuffer() *Buffer {
-	return &Buffer{
+// NewCircularBuffer creates a new circular buffer of size bufferSize
+func NewCircularBuffer() *CircularBuffer {
+	return &CircularBuffer{
 		Buffer: make([]string, bufferSize),
 	}
 }
 
-func (b *Buffer) Push(a string) {
-	b.Buffer[b.Index] = a
-	b.Index, b.Previous = (b.Index+1)%bufferSize, b.Index
+// Push adds a new string to the end of the buffer
+func (c *CircularBuffer) Push(a string) {
+	c.Buffer[c.Index] = a
+	c.Index, c.Previous = (c.Index+1)%bufferSize, c.Index
 }
 
-func (b *Buffer) Lookup(index int) string {
-	return b.Buffer[(b.Index+index)%bufferSize]
+// Item returns the string at index relative to the beginning of the buffer
+func (c *CircularBuffer) Item(index int) string {
+	return c.Buffer[(c.Index+index)%bufferSize]
 }
 
-func (b *Buffer) GetPrevious() string {
-	return b.Buffer[b.Previous]
+// GetPrevious gets the string just inserted into the buffer
+func (c *CircularBuffer) GetPrevious() string {
+	return c.Buffer[c.Previous]
 }
 
+// BigVector is a histogram of words which is reduced in dimensionality with
+// a random transform
 type BigVector struct {
+	// Vector is a dimensionality reduced histogram of words, so this vector
+	// is a document vector
 	Vector []int64
-	Words  map[string][]int64
-	Name   string
+	// Words is a hash table of words mapped to vectors
+	// the vectors are dimensionally reduced histograms of words found
+	// near a particular word, so the vectors are word vectors
+	Words map[string][]int64
+	// Name the name of this document vector
+	Name string
 }
 
+// NewBigVector creates a new big vector
 func NewBigVector(size int) *BigVector {
 	return &BigVector{
 		Vector: make([]int64, size),
@@ -93,6 +107,8 @@ func hash(a string) uint64 {
 	return h.Sum64()
 }
 
+// ProcessFile processes a file and computes the document vector and word
+// vectors
 func (b *BigVector) ProcessFile(name string) {
 	file, err := os.Open(name)
 	if err != nil {
@@ -101,7 +117,9 @@ func (b *BigVector) ProcessFile(name string) {
 	defer file.Close()
 
 	vector, cache, reader, word, buffer, size :=
-		b.Vector, make(map[uint64][]int8), bufio.NewReader(file), "", NewBuffer(), len(b.Vector)
+		b.Vector, make(map[uint64][]int8), bufio.NewReader(file), "", NewCircularBuffer(), len(b.Vector)
+
+	// lookup a cached transform
 	lookup := func(a string) []int8 {
 		h := hash(a)
 		transform, found := cache[h]
@@ -123,6 +141,7 @@ func (b *BigVector) ProcessFile(name string) {
 		cache[h] = transform
 		return transform
 	}
+
 	for {
 		r, _, err := reader.ReadRune()
 		if err != nil {
@@ -131,18 +150,21 @@ func (b *BigVector) ProcessFile(name string) {
 		if unicode.IsLetter(r) || r == '\'' {
 			word += string(unicode.ToLower(r))
 		} else if word != "" {
+			// compute the order 1 markov model document vector
 			transform := lookup(buffer.GetPrevious() + word)
 			for i, t := range transform {
 				vector[i] += int64(t)
 			}
 
-			center := buffer.Lookup(bufferSize / 2)
+			// find the word vector for the current word
+			center := buffer.Item(bufferSize / 2)
 			wordVector := b.Words[center]
 			if wordVector == nil {
 				wordVector = make([]int64, size)
 				b.Words[center] = wordVector
 			}
 
+			// compute the word vector
 			/*for i := 0; i < bufferSize; i++ {
 				current := buffer.Lookup(i)
 				if current == center {
@@ -154,9 +176,10 @@ func (b *BigVector) ProcessFile(name string) {
 				}
 			}*/
 
-			last := buffer.Lookup(0)
+			// compute the order 1 markov model word vector
+			last := buffer.Item(0)
 			for i := 1; i < bufferSize; i++ {
-				current := buffer.Lookup(i)
+				current := buffer.Item(i)
 				if current == center {
 					continue
 				}
@@ -174,6 +197,7 @@ func (b *BigVector) ProcessFile(name string) {
 	b.Name = name
 }
 
+// Distance computes the distance between two document vectors
 func (b *BigVector) Distance(a *BigVector) float64 {
 	/*var d int64
 		for i, j := range b.Vector {
@@ -184,6 +208,7 @@ func (b *BigVector) Distance(a *BigVector) float64 {
 	return Similarity(a.Vector, b.Vector)
 }
 
+// Similarity computes the distance between two vectors
 func Similarity(a, b []int64) float64 {
 	dot, xx, yy := 0.0, 0.0, 0.0
 	for i, j := range b {
@@ -195,26 +220,33 @@ func Similarity(a, b []int64) float64 {
 	return dot / math.Sqrt(xx*yy)
 }
 
+// Distance represents the distance between a query document and another
+// docuemnt
 type Distance struct {
 	D    float64
 	Name string
 }
 
+// Distances is a sortable slice of distances
 type Distances []Distance
 
+// Len is the length of the Distances slice
 func (d Distances) Len() int {
 	return len(d)
 }
 
+// Swap swaps two items in the slice
 func (d Distances) Swap(i, j int) {
 	d[i], d[j] = d[j], d[i]
 }
 
+// Less determines if one distance is less than another distance
 func (d Distances) Less(i, j int) bool {
 	return d[i].D > d[j].D
 }
 
 func main() {
+	// process the files in data in a parallelized fasion
 	data, err := os.Open(dataLocation)
 	if err != nil {
 		panic(err)
@@ -243,6 +275,7 @@ func main() {
 	}
 	wait.Wait()
 
+	// sum the word vectors across all documents
 	words := make(map[string][]int64)
 	for i := range vectors {
 		for word, vector := range vectors[i].Words {
@@ -257,6 +290,7 @@ func main() {
 		}
 	}
 
+	// sort the documents by how well they match the query document
 	fmt.Println("\ndocument match:")
 	distances := make(Distances, len(files))
 	for i := range distances {
@@ -268,6 +302,7 @@ func main() {
 		fmt.Printf("%v, %v\n", authors[distances[d].Name], distances[d].Name)
 	}
 
+	// find words that match the query word
 	best := [20]struct {
 		best float64
 		word string
@@ -282,7 +317,6 @@ func main() {
 			c++
 		}
 	}
-
 	queryVector := words[queryWord]
 	for word, vector := range words {
 		insert(Similarity(queryVector, vector), word)
