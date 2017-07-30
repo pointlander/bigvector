@@ -6,6 +6,9 @@ http://matpalm.com/resemblance/simhash/
 http://www.gutenberg-tar.com/  
 
 https://en.wikipedia.org/wiki/Latent_Dirichlet_allocation  
+https://endymecy.gitbooks.io/spark-ml-source-analysis/content/%E8%81%9A%E7%B1%BB/LDA/docs/Latent%20Dirichlet%20Allocation.pdf  
 http://blog.echen.me/2011/08/22/introduction-to-latent-dirichlet-allocation/  
 https://github.com/ahwood/lda-go  
 https://github.com/brettimus/gotomo  
+
+http://radimrehurek.com/gensim/index.html  
