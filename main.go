@@ -21,7 +21,7 @@ const (
 	vectorSize   = 1024
 	bufferSize   = 17
 	queryBook    = "pg1661.txt"
-	queryWord    = "sun"
+	queryWord    = "sea"
 )
 
 var authors = map[string]string{
@@ -324,5 +324,17 @@ func main() {
 	fmt.Printf("\nword match:\n")
 	for b := range best {
 		fmt.Println(best[b].word)
+	}
+
+	// sort the documents by how well they match the query word
+	fmt.Println("\nword to document match:")
+	distances = make(Distances, len(files))
+	for i := range distances {
+		distances[i].D = Similarity(queryVector, vectors[i].Vector)
+		distances[i].Name = vectors[i].Name
+	}
+	sort.Sort(distances)
+	for d := range distances {
+		fmt.Printf("%v, %v\n", authors[distances[d].Name], distances[d].Name)
 	}
 }
