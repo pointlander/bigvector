@@ -12,3 +12,7 @@ https://github.com/ahwood/lda-go
 https://github.com/brettimus/gotomo  
 
 http://radimrehurek.com/gensim/index.html  
+
+https://news.ycombinator.com/item?id=14830671  
+http://www.fast.ai/2017/07/17/num-lin-alg/  
+
