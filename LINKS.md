@@ -15,5 +15,7 @@ http://radimrehurek.com/gensim/index.html
 
 https://news.ycombinator.com/item?id=14830671  
 http://www.fast.ai/2017/07/17/num-lin-alg/  
+https://research.fb.com/fast-randomized-svd/  
+https://research.fb.com/publications/enriching-word-vectors-with-subword-information-2/  
 
 https://github.com/jdkato/prose  
