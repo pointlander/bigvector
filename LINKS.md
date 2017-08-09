@@ -19,3 +19,7 @@ https://research.fb.com/fast-randomized-svd/
 https://research.fb.com/publications/enriching-word-vectors-with-subword-information-2/  
 
 https://github.com/jdkato/prose  
+
+https://www.reddit.com/r/tech/comments/6rthnp/ray_kurzweil_reveals_plans_for_linguistically/  
+http://www.kurzweilai.net/ray-kurzweil-reveals-plans-for-linguistically-fluent-google-software  
+https://arxiv.org/pdf/1705.00652.pdf  
