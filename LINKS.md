@@ -26,3 +26,5 @@ https://arxiv.org/pdf/1705.00652.pdf
 
 https://www.reddit.com/r/golang/comments/6u10x1/feature_complete_golang_port_of_the_trend_micro/  
 https://github.com/glaslos/tlsh  
+
+http://mbmlbook.com/  
