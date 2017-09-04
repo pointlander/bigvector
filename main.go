@@ -6,13 +6,17 @@ package main
 
 import (
 	"bufio"
+	"compress/bzip2"
+	"encoding/xml"
+	"flag"
 	"fmt"
 	"hash/fnv"
+	"io"
+	"log"
 	"math"
 	"math/rand"
 	"os"
 	"sort"
-	"sync"
 	"unicode"
 )
 
@@ -20,7 +24,7 @@ const (
 	dataLocation = "data/"
 	vectorSize   = 1024
 	bufferSize   = 17
-	queryBook    = "pg1661.txt"
+	queryBook    = "data/pg1661.txt"
 	queryWord    = "sea"
 )
 
@@ -48,6 +52,36 @@ var authors = map[string]string{
 	"data/pg4300.txt":  "James Joyce",
 	"data/244-0.txt":   "Arthur Conan Doyle",
 	"data/2097.txt":    "Arthur Conan Doyle",
+}
+
+var (
+	demoMode = flag.Bool("demo", false, "demo mode")
+)
+
+type Vectors struct {
+	Documents, Words map[string][]int64
+}
+
+func NewVectors() *Vectors {
+	return &Vectors{
+		Documents: make(map[string][]int64),
+		Words:     make(map[string][]int64),
+	}
+}
+
+func (v *Vectors) Merge(vector *BigVector) {
+	v.Documents[vector.Name] = vector.Vector
+
+	for word, vector := range vector.Words {
+		wordVector := v.Words[word]
+		if wordVector == nil {
+			wordVector = make([]int64, vectorSize)
+			v.Words[word] = wordVector
+		}
+		for j, element := range vector {
+			wordVector[j] += element
+		}
+	}
 }
 
 // CircularBuffer is a circular buffer of size bufferSize
@@ -109,15 +143,23 @@ func hash(a string) uint64 {
 
 // ProcessFile processes a file and computes the document vector and word
 // vectors
-func (b *BigVector) ProcessFile(name string) {
+func ProcessFile(name string, done chan *BigVector) {
 	file, err := os.Open(name)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 
+	ProcessStream(file, name, done)
+}
+
+// ProcessStream processes a stream and computes the document vector and word
+// vectors
+func ProcessStream(in io.Reader, name string, done chan *BigVector) {
+	b := NewBigVector(vectorSize)
+
 	vector, cache, reader, word, buffer, size :=
-		b.Vector, make(map[uint64][]int8), bufio.NewReader(file), "", NewCircularBuffer(), len(b.Vector)
+		b.Vector, make(map[uint64][]int8), bufio.NewReader(in), "", NewCircularBuffer(), len(b.Vector)
 
 	// lookup a cached transform
 	lookup := func(a string) []int8 {
@@ -195,6 +237,8 @@ func (b *BigVector) ProcessFile(name string) {
 		}
 	}
 	b.Name = name
+
+	done <- b
 }
 
 // Distance computes the distance between two document vectors
@@ -245,7 +289,7 @@ func (d Distances) Less(i, j int) bool {
 	return d[i].D > d[j].D
 }
 
-func main() {
+func demo() {
 	// process the files in data in a parallelized fasion
 	data, err := os.Open(dataLocation)
 	if err != nil {
@@ -257,45 +301,29 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	vectors, wait := make([]*BigVector, len(files)), sync.WaitGroup{}
-	wait.Add(len(files))
-	process := func(name string, vector *BigVector) {
-		vector.ProcessFile(name)
-		fmt.Println(name)
-		wait.Done()
+	inFlight, done := 0, make(chan *BigVector, 8)
+	for _, file := range files {
+		go ProcessFile(dataLocation+file.Name(), done)
+		inFlight++
 	}
-	var query *BigVector
-	for i, file := range files {
-		fileName := dataLocation + file.Name()
-		vectors[i] = NewBigVector(vectorSize)
-		if file.Name() == queryBook {
-			query = vectors[i]
-		}
-		go process(fileName, vectors[i])
-	}
-	wait.Wait()
 
-	// sum the word vectors across all documents
-	words := make(map[string][]int64)
-	for i := range vectors {
-		for word, vector := range vectors[i].Words {
-			wordVector := words[word]
-			if wordVector == nil {
-				wordVector = make([]int64, vectorSize)
-				words[word] = wordVector
-			}
-			for j, element := range vector {
-				wordVector[j] += element
-			}
-		}
+	vectors := NewVectors()
+	for inFlight > 0 {
+		vector := <-done
+		inFlight--
+		fmt.Println(vector.Name)
+		vectors.Merge(vector)
 	}
+
+	query := vectors.Documents[queryBook]
 
 	// sort the documents by how well they match the query document
 	fmt.Println("\ndocument match:")
-	distances := make(Distances, len(files))
-	for i := range distances {
-		distances[i].D = query.Distance(vectors[i])
-		distances[i].Name = vectors[i].Name
+	distances, i := make(Distances, len(files)), 0
+	for key, value := range vectors.Documents {
+		distances[i].D = Similarity(query, value)
+		distances[i].Name = key
+		i++
 	}
 	sort.Sort(distances)
 	for d := range distances {
@@ -317,8 +345,8 @@ func main() {
 			c++
 		}
 	}
-	queryVector := words[queryWord]
-	for word, vector := range words {
+	queryVector := vectors.Words[queryWord]
+	for word, vector := range vectors.Words {
 		insert(Similarity(queryVector, vector), word)
 	}
 	fmt.Printf("\nword match:\n")
@@ -328,13 +356,58 @@ func main() {
 
 	// sort the documents by how well they match the query word
 	fmt.Println("\nword to document match:")
-	distances = make(Distances, len(files))
-	for i := range distances {
-		distances[i].D = Similarity(queryVector, vectors[i].Vector)
-		distances[i].Name = vectors[i].Name
+	distances, i = make(Distances, len(files)), 0
+	for key, value := range vectors.Documents {
+		distances[i].D = Similarity(queryVector, value)
+		distances[i].Name = key
+		i++
 	}
 	sort.Sort(distances)
 	for d := range distances {
 		fmt.Printf("%v, %v\n", authors[distances[d].Name], distances[d].Name)
+	}
+}
+
+func main() {
+	flag.Parse()
+	if *demoMode {
+		demo()
+		return
+	}
+
+	file, err := os.Open("enwiki-latest-pages-articles.xml.bz2")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	decoder := xml.NewDecoder(bzip2.NewReader(file))
+	decoder.Strict = false
+	inText, inTitle, title, article, currentTitle := false, false, "", "", ""
+	for token, err := decoder.RawToken(); err == nil; token, err = decoder.RawToken() {
+		switch t := token.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "text" {
+				inText = true
+			} else if t.Name.Local == "title" {
+				inTitle = true
+			}
+		case xml.CharData:
+			if inText {
+				article += string(t)
+			} else if inTitle {
+				title += string(t)
+			}
+		case xml.EndElement:
+			if inText {
+				//fmt.Printf("inText: %v\n", currentTitle)
+				_ = currentTitle
+				inText, article = false, ""
+			} else if inTitle {
+				currentTitle = title
+				//fmt.Printf("inTitle: %v\n", currentTitle)
+				inTitle, title = false, ""
+			}
+		}
 	}
 }
