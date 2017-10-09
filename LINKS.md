@@ -28,3 +28,5 @@ https://www.reddit.com/r/golang/comments/6u10x1/feature_complete_golang_port_of_
 https://github.com/glaslos/tlsh  
 
 http://mbmlbook.com/  
+
+https://monkeylearn.com/blog/beginners-guide-text-vectorization/  
