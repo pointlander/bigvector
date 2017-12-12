@@ -30,3 +30,5 @@ https://github.com/glaslos/tlsh
 http://mbmlbook.com/  
 
 https://monkeylearn.com/blog/beginners-guide-text-vectorization/  
+
+http://jasonpunyon.com/blog/2017/12/02/fun-with-random-numbers-random-projection/  
