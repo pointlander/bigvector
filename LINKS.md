@@ -36,3 +36,8 @@ http://jasonpunyon.com/blog/2017/12/02/fun-with-random-numbers-random-projection
 # Context Is Everything: Finding Meaning Statistically in Semantic Spaces
 https://news.ycombinator.com/item?id=16946446  
 https://arxiv.org/abs/1803.08493  
+
+# Go efficient text segmentation
+https://www.reddit.com/r/golang/comments/8faz7j/gse_v0100_is_released_go_efficient_text/  
+https://github.com/go-ego/gse  
+
