@@ -32,3 +32,7 @@ http://mbmlbook.com/
 https://monkeylearn.com/blog/beginners-guide-text-vectorization/  
 
 http://jasonpunyon.com/blog/2017/12/02/fun-with-random-numbers-random-projection/  
+
+# Context Is Everything: Finding Meaning Statistically in Semantic Spaces
+https://news.ycombinator.com/item?id=16946446  
+https://arxiv.org/abs/1803.08493  
