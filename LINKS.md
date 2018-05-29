@@ -41,3 +41,5 @@ https://arxiv.org/abs/1803.08493
 https://www.reddit.com/r/golang/comments/8faz7j/gse_v0100_is_released_go_efficient_text/  
 https://github.com/go-ego/gse  
 
+# Word2Vec, GloVe in Go!
+https://github.com/ynqa/word-embedding  
